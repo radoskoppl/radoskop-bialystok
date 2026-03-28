@@ -4,15 +4,21 @@ Scraper interpelacji i zapytań radnych z BIP Białystok.
 
 UWAGA: Uruchom lokalnie — sandbox Cowork blokuje domeny
 
-Źródło: https://www.bip.bialystok.pl/
+Źródło: https://www.bip.bialystok.pl/wladze/rada_miasta_bialystok/interpelacje-i-zapytania/
 
-BIP Białystok zawiera interpelacje i zapytania radnych.
-Struktura: /interpelacje/szukaj — lista z filtrowaniem po kadencji.
+BIP Białystok wyświetla interpelacje jako listę rozwijalną z paginacją
+opartą na formularzu POST (offset/limit). Każdy wpis zawiera:
+  - Nr interpelacji
+  - W sprawie (temat)
+  - Data złożenia
+  - Imię i nazwisko radnego
+
+Strony szczegółowe zawierają załączniki PDF (skan interpelacji, odpowiedź).
 
 Użycie:
   python3 scrape_interpelacje.py [--output docs/interpelacje.json]
                                  [--kadencja IX]
-                                 [--fetch-details]
+                                 [--skip-details]
                                  [--debug]
 """
 
@@ -42,35 +48,46 @@ except ImportError:
 
 BASE_URL = "https://www.bip.bialystok.pl"
 
-# Białystok BIP structure — adjust based on actual site
+# Each kadencja has its own listing page on BIP.
+# form_id is the HTML form element ID used for pagination requests.
 KADENCJE = {
-    "IX":   {"label": "IX kadencja (2024–2029)", "search_term": "IX"},
-    "VIII": {"label": "VIII kadencja (2018–2024)", "search_term": "VIII"},
+    "IX": {
+        "label": "IX kadencja (2024–2029)",
+        "path": "/wladze/rada_miasta_bialystok/interpelacje-i-zapytania/",
+        "form_id": "PAGE_SEARCH_TYPE_INTERAPPELATIONS_2024_2029_FORM",
+    },
 }
 
 HEADERS = {
     "User-Agent": "Radoskop/1.0 (https://bialystok.radoskop.pl; kontakt@radoskop.pl)",
-    "Accept": "text/html",
+    "Accept": "text/html,application/xhtml+xml",
 }
 
 DELAY = 0.5
-PER_PAGE = 25
+PAGE_LIMIT = 10  # BIP shows 10 items per page
 
 
 # ---------------------------------------------------------------------------
 # Scraping
 # ---------------------------------------------------------------------------
 
-def fetch_interpelacje_page(session, page, kadencja_search_term, debug=False):
-    """Pobiera stronę listy interpelacji z BIP Białystok."""
-    # Try standard BIP search pattern
-    url = f"{BASE_URL}/interpelacje"
+def fetch_list_page(session, path, form_id, offset=0, limit=PAGE_LIMIT, debug=False):
+    """Fetch one page of interpelacje listing via GET with pagination params.
+
+    BIP Białystok uses a form with method=GET. The pagination requires
+    three params: pagination[form] (the form ID), pagination[offset],
+    and pagination[limit].
+    """
+    url = BASE_URL + path
+
     params = {
-        "page": page,
+        "pagination[form]": form_id,
+        "pagination[offset]": str(offset),
+        "pagination[limit]": str(limit),
     }
 
     if debug:
-        print(f"  [DEBUG] GET {url} params={params}")
+        print(f"  [DEBUG] GET {url} offset={offset} limit={limit}")
 
     try:
         resp = session.get(url, headers=HEADERS, params=params, timeout=30)
@@ -82,174 +99,175 @@ def fetch_interpelacje_page(session, page, kadencja_search_term, debug=False):
         return None
 
 
-def parse_interpelacje_list(html, kadencja_name, debug=False):
-    """Parsuje listę interpelacji z BIP.
+def parse_list_page(html, kadencja_name, debug=False):
+    """Parse interpelacje from a BIP listing page.
 
-    Szuka tablic z wierszami zawierającymi:
-      - Przedmiot interpelacji (link)
-      - Radny
-      - Status odpowiedzi
+    Each entry is an h3 with a link, followed by text fields:
+      Nr interpelacji: [Kadencja ...] NNN
+      W sprawie: ...
+      Data złożenia: YYYY-MM-DD
+      Imię i nazwisko: [Kadencja ...] Firstname Lastname
     """
     if not html:
-        return [], 1
+        return [], 0
 
     soup = BeautifulSoup(html, "html.parser")
     records = []
 
-    # BIP Białystok typically uses tables or list items for interpelacje
-    main = soup.find("main") or soup
-
-    # Try to find tables with interpelacje
-    tables = main.find_all("table")
-    if not tables:
-        # Try to find list items
-        tables = main.find_all("div", class_=re.compile(r'interpelacja|list-item', re.I))
-
-    for table in tables:
-        rows = table.find_all("tr")
-        if len(rows) < 2:
-            rows = table.find_all("div", class_=re.compile(r'row|item', re.I))
-
-        if len(rows) < 1:
+    # Find all h3 elements that contain links to individual interpelacje
+    for h3 in soup.find_all("h3"):
+        a = h3.find("a", href=True)
+        if not a:
+            continue
+        href = a.get("href", "")
+        if "interpelacj" not in href.lower() and "nr-interpelacji" not in href.lower():
             continue
 
-        # Process rows
-        for row in rows:
-            cells = row.find_all(["td", "div"])
-            if len(cells) < 2:
-                continue
+        # Extract number from link text: "Nr interpelacji: [Kadencja 2024-2029] 316"
+        link_text = a.get_text(strip=True)
+        nr_match = re.search(r'(\d+)\s*$', link_text)
+        nr = nr_match.group(1) if nr_match else ""
 
-            record = {
-                "przedmiot": "",
-                "radny": "",
-                "status": "",
-                "bip_url": "",
-                "typ": "interpelacja",
-                "kadencja": kadencja_name,
-            }
+        full_url = href
+        if href.startswith("/"):
+            full_url = BASE_URL + href
 
-            # Try to extract interpelacja data from cells
-            row_text = row.get_text(separator=" | ")
+        # The fields follow the h3 in the DOM. Walk siblings or look at the
+        # parent container to find the text fields.
+        parent = h3.parent
+        if not parent:
+            continue
 
-            # Look for subject link
-            a = row.find("a", href=True)
-            if a:
-                record["przedmiot"] = a.get_text(strip=True)
-                href = a.get("href", "")
-                if href.startswith("/"):
-                    record["bip_url"] = BASE_URL + href
-                elif href.startswith("http"):
-                    record["bip_url"] = href
+        parent_text = parent.get_text(separator="\n")
+        lines = [l.strip() for l in parent_text.split("\n") if l.strip()]
 
-            # Try to extract councillor name (usually second column)
-            if len(cells) >= 2:
-                radny_text = cells[1].get_text(strip=True)
-                if radny_text and "interpelacja" not in radny_text.lower():
-                    record["radny"] = radny_text
+        przedmiot = ""
+        data_zlozenia = ""
+        radny = ""
 
-            # Try to extract status (usually third column)
-            if len(cells) >= 3:
-                status_text = cells[2].get_text(strip=True)
-                if status_text:
-                    record["status"] = status_text
+        for line in lines:
+            if line.lower().startswith("w sprawie:"):
+                przedmiot = line.split(":", 1)[1].strip()
+            elif line.lower().startswith("data złożenia:") or line.lower().startswith("data zlozenia:"):
+                raw_date = line.split(":", 1)[1].strip()
+                data_zlozenia = parse_date(raw_date)
+            elif line.lower().startswith("imię i nazwisko:") or line.lower().startswith("imie i nazwisko:"):
+                raw_name = line.split(":", 1)[1].strip()
+                # Remove kadencja prefix: "[Kadencja 2024-2029] Name"
+                raw_name = re.sub(r'\[.*?\]\s*', '', raw_name).strip()
+                radny = raw_name
 
-            if record.get("przedmiot"):
-                records.append(record)
+        record = {
+            "nr": nr,
+            "przedmiot": przedmiot,
+            "radny": radny,
+            "data_wplywu": data_zlozenia,
+            "bip_url": full_url,
+            "typ": "interpelacja",
+            "kadencja": kadencja_name,
+        }
 
-    # Detect pagination
-    total_pages = 1
-    for a in soup.find_all("a"):
-        href = a.get("href", "")
-        txt = a.get_text(strip=True)
-        # Check for page numbers
-        if re.match(r"^\d+$", txt):
-            p = int(txt)
-            if p > total_pages:
-                total_pages = p
-        # Check for "next" links
-        m = re.search(r"[?&]page=(\d+)", href)
-        if m:
-            p = int(m.group(1))
-            if p > total_pages:
-                total_pages = p
+        if record["przedmiot"] or record["nr"]:
+            records.append(record)
+
+    # Detect total items from pagination links (data-offset attributes)
+    max_offset = 0
+    for a_tag in soup.find_all("a", class_="page-search-filter-pagination-link"):
+        offset_val = a_tag.get("data-offset", "0")
+        try:
+            off = int(offset_val)
+            if off > max_offset:
+                max_offset = off
+        except ValueError:
+            pass
+
+    # Also check pagination text like "1 2 3 ... 32"
+    for a_tag in soup.find_all("a"):
+        text = a_tag.get_text(strip=True)
+        if re.match(r'^\d+$', text):
+            try:
+                page_num = int(text)
+                estimated_offset = (page_num - 1) * PAGE_LIMIT
+                if estimated_offset > max_offset:
+                    max_offset = estimated_offset
+            except ValueError:
+                pass
+
+    total_pages = (max_offset // PAGE_LIMIT) + 1 if max_offset > 0 else 1
 
     if debug:
-        print(f"  [DEBUG] Parsed {len(records)} records, total_pages={total_pages}")
+        print(f"  [DEBUG] Parsed {len(records)} records, max_offset={max_offset}, total_pages={total_pages}")
 
     return records, total_pages
 
 
-def fetch_interpelacja_detail(session, bip_url, debug=False):
-    """Pobiera szczegóły interpelacji z jej strony."""
+def fetch_detail(session, bip_url, debug=False):
+    """Fetch detail page for an interpelacja. Extract attachments and dates."""
     if not bip_url:
         return {}
 
     if debug:
-        print(f"  [DEBUG] GET {bip_url}")
+        print(f"    [DEBUG] GET {bip_url}")
 
     try:
         resp = session.get(bip_url, headers=HEADERS, timeout=30)
         resp.raise_for_status()
         soup = BeautifulSoup(resp.text, "html.parser")
-
-        detail = {}
-        # Look for table with details
-        for row in soup.find_all("tr"):
-            th = row.find("th")
-            td = row.find("td")
-            if not th or not td:
-                continue
-
-            label = th.get_text(strip=True).lower()
-            val = td.get_text(strip=True)
-
-            if "typ" in label:
-                detail["typ_full"] = val
-            elif "nr" in label or "numer" in label:
-                detail["nr_sprawy"] = val
-            elif "data" in label and "wplyw" in label:
-                detail["data_wplywu"] = parse_date(val)
-            elif "data" in label and "odpowied" in label:
-                detail["data_odpowiedzi"] = parse_date(val)
-
-        # Find attachment links
-        attachments = []
-        for a in soup.find_all("a", href=True):
-            href = a.get("href", "")
-            text = a.get_text(strip=True)
-            if "attachment" in href or "download" in href or "pdf" in href.lower():
-                full_url = BASE_URL + href if href.startswith("/") else href
-                attachments.append({"nazwa": text, "url": full_url})
-
-                text_lower = text.lower()
-                if "odpowied" in text_lower:
-                    detail["odpowiedz_url"] = full_url
-                elif not detail.get("tresc_url"):
-                    detail["tresc_url"] = full_url
-
-        if attachments:
-            detail["zalaczniki"] = attachments
-
-        return detail
     except Exception as e:
         if debug:
-            print(f"  [DEBUG] Error fetching detail {bip_url}: {e}")
+            print(f"    [DEBUG] Błąd: {e}")
         return {}
+
+    detail = {}
+    page_text = soup.get_text(separator="\n")
+    lines = [l.strip() for l in page_text.split("\n") if l.strip()]
+
+    for line in lines:
+        lower = line.lower()
+        if "data przekazania prezydentowi" in lower or "data przekazania" in lower:
+            raw = line.split(":", 1)[-1].strip()
+            detail["data_przekazania"] = parse_date(raw)
+        elif "data publikacji" in lower:
+            raw = line.split(":", 1)[-1].strip()
+            detail["data_publikacji"] = parse_date(raw)
+
+    # Find PDF attachments
+    attachments = []
+    for a_tag in soup.find_all("a", href=True):
+        href = a_tag.get("href", "")
+        text = a_tag.get_text(strip=True)
+        if ".pdf" in href.lower() or "resource" in href.lower():
+            full_url = href
+            if href.startswith("/"):
+                full_url = BASE_URL + href
+            attachments.append({"nazwa": text, "url": full_url})
+
+            text_lower = text.lower()
+            if "odpowied" in text_lower:
+                detail["odpowiedz_url"] = full_url
+                detail["odpowiedz_status"] = "udzielono odpowiedzi"
+            elif not detail.get("tresc_url"):
+                detail["tresc_url"] = full_url
+
+    if attachments:
+        detail["zalaczniki"] = attachments
+
+    return detail
 
 
 def parse_date(raw):
-    """Konwertuje datę na format YYYY-MM-DD."""
+    """Convert date to YYYY-MM-DD format."""
     if not raw:
         return ""
     raw = raw.strip()
-    # DD.MM.YYYY or DD.MM.YYYY HH:MM
-    m = re.match(r"(\d{2})\.(\d{2})\.(\d{4})", raw)
-    if m:
-        return f"{m.group(3)}-{m.group(2)}-{m.group(1)}"
     # YYYY-MM-DD
     m = re.match(r"(\d{4})-(\d{2})-(\d{2})", raw)
     if m:
         return raw[:10]
+    # DD-MM-YYYY or DD.MM.YYYY
+    m = re.match(r"(\d{2})[.\-](\d{2})[.\-](\d{4})", raw)
+    if m:
+        return f"{m.group(3)}-{m.group(2)}-{m.group(1)}"
     return raw
 
 
@@ -276,7 +294,7 @@ CATEGORIES = {
 
 
 def classify_category(przedmiot):
-    """Klasyfikuje kategorię interpelacji."""
+    """Classify interpelacja category by keywords."""
     if not przedmiot:
         return "inne"
     text = przedmiot.lower()
@@ -292,7 +310,7 @@ def classify_category(przedmiot):
 # ---------------------------------------------------------------------------
 
 def scrape(kadencje, output_path, fetch_details=True, debug=False):
-    """Główna funkcja scrapowania."""
+    """Main scraping function."""
     session = requests.Session()
     all_records = []
 
@@ -304,16 +322,19 @@ def scrape(kadencje, output_path, fetch_details=True, debug=False):
 
         print(f"\n=== {kad['label']} ===")
 
-        page = 1
+        offset = 0
         total_pages = None
         kad_records = []
+        page_num = 1
 
         while True:
             try:
-                html = fetch_interpelacje_page(session, page, kad['search_term'], debug=debug)
-                records, pages = parse_interpelacje_list(html, kad_name, debug=debug)
+                html = fetch_list_page(session, kad["path"], kad["form_id"],
+                                       offset=offset, limit=PAGE_LIMIT,
+                                       debug=debug)
+                records, pages = parse_list_page(html, kad_name, debug=debug)
             except Exception as e:
-                print(f"  BŁĄD na stronie {page}: {e}")
+                print(f"  BŁĄD na offset {offset}: {e}")
                 break
 
             if total_pages is None:
@@ -323,59 +344,67 @@ def scrape(kadencje, output_path, fetch_details=True, debug=False):
             kad_records.extend(records)
 
             if debug:
-                print(f"  Strona {page}/{total_pages}: {len(records)} rekordów")
-            elif page % 10 == 0:
-                print(f"  Strona {page}/{total_pages}...")
+                print(f"  Strona {page_num}/{total_pages}: {len(records)} rekordów")
+            elif page_num % 10 == 0:
+                print(f"  Strona {page_num}/{total_pages}...")
 
-            if not records or page >= total_pages:
+            if not records or page_num >= total_pages:
                 break
 
-            page += 1
+            offset += PAGE_LIMIT
+            page_num += 1
             time.sleep(DELAY)
 
         print(f"  Pobrano: {len(kad_records)} rekordów")
 
-        # Optionally fetch details for each record
-        if fetch_details:
+        # Deduplicate by nr
+        seen = set()
+        unique = []
+        for r in kad_records:
+            key = r.get("nr", "") or r.get("bip_url", "")
+            if key and key not in seen:
+                seen.add(key)
+                unique.append(r)
+        kad_records = unique
+        if len(kad_records) != len(seen):
+            print(f"  Po deduplikacji: {len(kad_records)} rekordów")
+
+        # Fetch detail pages
+        if fetch_details and kad_records:
             print(f"\n  Pobieram szczegóły ({len(kad_records)} rekordów)...")
             for i, rec in enumerate(kad_records):
                 bip_url = rec.get("bip_url", "")
                 if not bip_url:
                     continue
-                detail = fetch_interpelacja_detail(session, bip_url, debug=debug)
+                detail = fetch_detail(session, bip_url, debug=debug)
                 if detail:
                     rec.update({k: v for k, v in detail.items() if v})
                 if (i + 1) % 50 == 0:
-                    print(f"  Szczegóły: {i+1}/{len(kad_records)}")
+                    print(f"    Szczegóły: {i+1}/{len(kad_records)}")
                 time.sleep(DELAY)
 
         all_records.extend(kad_records)
 
-    # Classify categories and normalize fields
+    # Classify and normalize
     for rec in all_records:
         rec["kategoria"] = classify_category(rec.get("przedmiot", ""))
-
-        # Normalize status
-        status = rec.get("status", "").lower()
-        rec["odpowiedz_status"] = status
-
-        # Ensure consistent output fields
         rec.setdefault("data_wplywu", "")
-        rec.setdefault("data_odpowiedzi", "")
+        rec.setdefault("data_odpowiedzi", rec.get("data_przekazania", ""))
         rec.setdefault("tresc_url", "")
         rec.setdefault("odpowiedz_url", "")
-        rec.setdefault("nr_sprawy", "")
+        rec.setdefault("odpowiedz_status", "")
+        rec.setdefault("nr_sprawy", rec.get("nr", ""))
 
-    # Sort by newest first
+    # Sort newest first
     all_records.sort(
-        key=lambda x: x.get("data_wplywu", "") or x.get("bip_url", ""),
+        key=lambda x: x.get("data_wplywu", "") or x.get("nr", ""),
         reverse=True,
     )
 
     # Stats
     interp = sum(1 for r in all_records if r.get("typ") == "interpelacja")
     zap = sum(1 for r in all_records if r.get("typ") == "zapytanie")
-    answered = sum(1 for r in all_records if "udzielono" in r.get("odpowiedz_status", ""))
+    answered = sum(1 for r in all_records if r.get("odpowiedz_url"))
     print(f"\n=== Podsumowanie ===")
     print(f"Interpelacje: {interp}")
     print(f"Zapytania:    {zap}")
@@ -402,7 +431,7 @@ def main():
     )
     parser.add_argument(
         "--kadencja", default="IX",
-        help="Kadencja: IX, VIII lub 'all' (domyślnie: IX)"
+        help="Kadencja: IX lub 'all' (domyślnie: IX)"
     )
     parser.add_argument(
         "--skip-details", action="store_true",

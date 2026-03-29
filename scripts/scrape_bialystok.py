@@ -196,6 +196,11 @@ def fetch(url: str) -> BeautifulSoup:
     print(f"  GET {url}")
     resp = _session.get(url, timeout=30)
     resp.raise_for_status()
+    # eSesja pages declare windows-1250 in meta charset but the HTTP header
+    # omits charset, so requests falls back to ISO-8859-1 which mangles
+    # Polish characters (ł→³, ą→¹, ę→ê, etc.)
+    if "esesja" in url:
+        resp.encoding = "windows-1250"
     return BeautifulSoup(resp.text, "lxml")
 
 

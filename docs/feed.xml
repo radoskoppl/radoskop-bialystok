@@ -5,11 +5,20 @@
   <link href="https://bialystok.radoskop.pl/feed.xml" rel="self" type="application/atom+xml"/>
   <link href="https://bialystok.radoskop.pl/" rel="alternate" type="text/html"/>
   <id>https://bialystok.radoskop.pl/</id>
-  <updated>2026-04-05T13:46:09Z</updated>
+  <updated>2026-04-09T03:22:44Z</updated>
   <author>
     <name>Radoskop</name>
     <uri>https://radoskop.pl</uri>
   </author>
+  <entry>
+    <title>Interpelacja: działań podejmowanych przez Prezydenta Miasta dotyczących zatrzymania produkcji Biaglass Huta Szkła </title>
+    <link href="https://bialystok.radoskop.pl/interpelacje/" rel="alternate" type="text/html"/>
+    <id>https://bialystok.radoskop.pl/interpelacje/#interpelacja</id>
+    <published>2026-04-01T12:00:00+01:00</published>
+    <updated>2026-04-01T12:00:00+01:00</updated>
+    <summary type="html">Henryk Dębowski. działań podejmowanych przez Prezydenta Miasta dotyczących zatrzymania produkcji Biaglass Huta Szkła w Białymstoku</summary>
+    <category term="interpelacja"/>
+  </entry>
   <entry>
     <title>wprowadzenia do porządku obrad projektu uchwały w sprawie wyrażenia zgody na zawarcie porozumienia w</title>
     <link href="https://bialystok.radoskop.pl/glosowanie/2026-03-30_000_000/" rel="alternate" type="text/html"/>
@@ -270,15 +279,6 @@
     <updated>2026-03-30T12:00:00+01:00</updated>
     <summary type="html">Wynik: przyjete (za 19, przeciw 0, wstrzym. 6). Sesja .</summary>
     <category term="vote"/>
-  </entry>
-  <entry>
-    <title>Interpelacja: zabezpieczania terenu pod cele publiczne w sporządzanym planie miejscowym dla rejonu ul. św. Łukasza</title>
-    <link href="https://bialystok.radoskop.pl/interpelacje/" rel="alternate" type="text/html"/>
-    <id>https://bialystok.radoskop.pl/interpelacje/#interpelacja</id>
-    <published>2026-03-30T12:00:00+01:00</published>
-    <updated>2026-03-30T12:00:00+01:00</updated>
-    <summary type="html">Sebastian Jakub Putra. zabezpieczania terenu pod cele publiczne w sporządzanym planie miejscowym dla rejonu ul. św. Łukasza i Chmielowej</summary>
-    <category term="interpelacja"/>
   </entry>
   <entry>
     <title>zmiany kolejności rozpatrywania punktów tj. przesunięcie punktu 8 przed punkt 7</title>

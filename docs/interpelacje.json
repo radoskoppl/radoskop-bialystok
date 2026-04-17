@@ -1,5 +1,27 @@
 [
   {
+    "nr": "334",
+    "przedmiot": "ustawienia dwóch stałych koszy na śmieci przy ciągu rowerowo-pieszym łączącym ul. Racławicką z ul. Brzeską",
+    "radny": "Karol Masztalerz",
+    "data_wplywu": "2026-04-13",
+    "bip_url": "https://www.bip.bialystok.pl/wladze/rada_miasta_bialystok/interpelacje-i-zapytania/nr-interpelacji-kadencja-2024-2029-334.html",
+    "typ": "interpelacja",
+    "kadencja": "IX",
+    "data_przekazania": "Data przekazania do Prezydenta",
+    "tresc_url": "https://www.bip.bialystok.pl/resource/103727/K.+Masztaalerz+15.04.2026.pdf",
+    "zalaczniki": [
+      {
+        "nazwa": "Interpelacja (skan)",
+        "url": "https://www.bip.bialystok.pl/resource/103727/K.+Masztaalerz+15.04.2026.pdf"
+      }
+    ],
+    "kategoria": "transport",
+    "data_odpowiedzi": "Data przekazania do Prezydenta",
+    "odpowiedz_url": "",
+    "odpowiedz_status": "",
+    "nr_sprawy": "334"
+  },
+  {
     "nr": "333",
     "przedmiot": "pomiarów głośności ruchu na Trasie Niepodległości na odcinku Starosielce",
     "radny": "Karol Masztalerz",
@@ -9,16 +31,20 @@
     "kadencja": "IX",
     "data_przekazania": "Data przekazania do Prezydenta",
     "tresc_url": "https://www.bip.bialystok.pl/resource/103684/K.Masztalerz+10.04+%25283%2529.pdf",
+    "odpowiedz_url": "https://www.bip.bialystok.pl/resource/103684/K.+Masztalerz+17.04.2026.pdf",
+    "odpowiedz_status": "udzielono odpowiedzi",
     "zalaczniki": [
       {
         "nazwa": "Interpelacja (skan)",
         "url": "https://www.bip.bialystok.pl/resource/103684/K.Masztalerz+10.04+%25283%2529.pdf"
+      },
+      {
+        "nazwa": "Odpowiedź (skan)",
+        "url": "https://www.bip.bialystok.pl/resource/103684/K.+Masztalerz+17.04.2026.pdf"
       }
     ],
     "kategoria": "inne",
     "data_odpowiedzi": "Data przekazania do Prezydenta",
-    "odpowiedz_url": "",
-    "odpowiedz_status": "",
     "nr_sprawy": "333"
   },
   {
@@ -401,16 +427,20 @@
     "kadencja": "IX",
     "data_przekazania": "Data przekazania do Prezydenta",
     "tresc_url": "https://www.bip.bialystok.pl/resource/103522/E.+Tokajuk+31.03.2026.pdf",
+    "odpowiedz_url": "https://www.bip.bialystok.pl/resource/103522/E.+Tokajuk+17.04.2026.pdf",
+    "odpowiedz_status": "udzielono odpowiedzi",
     "zalaczniki": [
       {
         "nazwa": "Interpelacja (skan)",
         "url": "https://www.bip.bialystok.pl/resource/103522/E.+Tokajuk+31.03.2026.pdf"
+      },
+      {
+        "nazwa": "Odpowiedź (skan)",
+        "url": "https://www.bip.bialystok.pl/resource/103522/E.+Tokajuk+17.04.2026.pdf"
       }
     ],
     "kategoria": "inne",
     "data_odpowiedzi": "Data przekazania do Prezydenta",
-    "odpowiedz_url": "",
-    "odpowiedz_status": "",
     "nr_sprawy": "317"
   },
   {
